@@ -1,0 +1,14 @@
+venv/
+.localstack/
+
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.workspaces/
+
+src/lambdas/*/
+src/lambdas/paramiko/
+src/lambdas/cryptography/
+src/lambdas/cffi/
+src/lambdas/*.dist-info/
+terraform/modules/compute/files/

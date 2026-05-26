@@ -1,0 +1,29 @@
+networks:
+  lakehouse_net:
+    name: lakehouse_net
+
+services:
+  floci:
+    container_name: floci_lakehouse
+    image: floci/floci:latest
+    ports:
+      - "127.0.0.1:4566:4566"
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+      - FLOCI_STORAGE_MODE=hybrid
+    volumes:
+      - "./.floci:/data"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    networks:
+      - lakehouse_net
+
+  sftp_server:
+    container_name: sftp_lakehouse
+    image: atmoz/sftp:latest
+    ports:
+      - "2222:22"
+    command: sftpuser:password:1001:1001:upload
+    volumes:
+      - ./sftp_data:/home/sftpuser/upload
+    networks:
+      - lakehouse_net
