@@ -59,11 +59,11 @@ Para não poluir sua máquina, vamos isolar as dependências no venv e depois in
 ⚠️ Aviso: Este comando vai baixar várias pastas (como paramiko, cryptography, cffi) para dentro do seu diretório src/lambdas/. Isso é normal e necessário para o deployment de Lambdas com dependências externas.
 
 ### Passo 3: Subir os Containers do Docker
-Agora que os arquivos de dados locais estão prontos, suba o LocalStack e o servidor SFTP na mesma rede virtual:
+Agora que os arquivos de dados locais estão prontos, suba o Floci e o servidor SFTP na mesma rede virtual:
   ```bash
   docker-compose up -d
   ```
-Verifique se os containers estão rodando com docker ps. O LocalStack estará pronto quando responder na porta 4566.
+Verifique se os containers estão rodando com `docker ps`. O Floci estará pronto quando responder na porta 4566.
 
 ### Passo 4: Inicializar e Aplicar o Terraform (Workspace Local)
 Navegue até a pasta do Terraform, crie o isolamento de ambiente (workspace) e aplique a infraestrutura:
@@ -119,7 +119,7 @@ Agora, execute o Job Spark que lerá a Landing Zone, aplicará as transformaçõ
   spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.iceberg:iceberg-aws-bundle:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 --py-files src/glue_jobs/spark_utils.py src/glue_jobs/companies/landing_to_iceberg_companies.py
   spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.iceberg:iceberg-aws-bundle:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 --py-files src/glue_jobs/spark_utils.py  src/glue_jobs/companies/iceberg_companies_silver.py
   ```
-Para validar a criação dos metadados e arquivos de manifesto do Iceberg (arquivos .metadata.json, .avro), inspecione o bucket de Lakehouse:
+Para validar a criação dos metadados transacionais e arquivos de manifesto do Iceberg, inspecione o bucket de Lakehouse (note o sufixo .db inserido pelo Glue Catalog):
 
   ```bash
   aws --endpoint-url=http://localhost:4566 s3 ls s3://uk-lakehouse-iceberg-local/warehouse/uk_economy_db_local.db/uk_cpi_inflation/ --recursive --region us-east-1
@@ -140,4 +140,4 @@ A beleza desta arquitetura baseada em Workspaces é a portabilidade. Para implan
   terraform workspace new prod
   terraform workspace select prod
   ```
-3. O arquivo providers.tf identificará que o workspace não é mais o local e removerá os redirecionamentos de portas, criando tudo nativamente na sua conta AWS Cloud. Basta rodar terraform apply.
+3. O bloco dynamic no arquivo providers.tf identificará que o workspace não é mais o local e removerá os redirecionamentos de portas. A condição count = 0 dos Glue Jobs passará a valer 1, criando toda a infraestrutura física, orquestradores e jobs nativamente na sua conta AWS Cloud. Basta rodar `terraform apply`.
