@@ -1,9 +1,9 @@
 # ==========================================
 # 1. VARIÁVEIS DE ENTRADA DO MÓDULO
 # ==========================================
-variable "environment" {}
-variable "landing_bucket" {}
-variable "lakehouse_arn" {}
+variable "environment" { type = string }
+variable "landing_bucket" { type = string }
+variable "lakehouse_arn" { type = string }
 
 # ==========================================
 # 2. PERMISSÕES (IAM ROLE)
@@ -18,6 +18,70 @@ resource "aws_iam_role" "lambda_glue_role" {
       Principal = { Service = ["lambda.amazonaws.com", "glue.amazonaws.com"] }
     }]
   })
+}
+
+resource "aws_secretsmanager_secret" "sftp_credentials" {
+  name        = "sftp/credentials/${var.environment}"
+  description = "Credenciais para o servidor SFTP de empresas"
+  recovery_window_in_days = 0 
+}
+
+resource "aws_secretsmanager_secret_version" "sftp_credentials_val" {
+  secret_id     = aws_secretsmanager_secret.sftp_credentials.id
+  secret_string = jsonencode({
+    username = "sftpuser"
+    password = "password"
+  })
+}
+
+resource "aws_iam_policy" "lambda_policy" {
+  name        = "lambda_policy_${var.environment}"
+  description = "Permissoes para as Lambdas acessarem S3, CloudWatch e Secrets Manager"
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # Permissões de S3 (Landing e Lakehouse)
+        Effect   = "Allow"
+        Action   = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          var.lakehouse_arn,
+          "${var.lakehouse_arn}/*",
+          "arn:aws:s3:::${var.landing_bucket}",
+          "arn:aws:s3:::${var.landing_bucket}/*"
+        ]
+      },
+      {
+        # Permissões de CloudWatch (Logs)
+        Effect   = "Allow"
+        Action   = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        # Permissão NOVA para buscar a senha do SFTP
+        Effect   = "Allow"
+        Action   = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = aws_secretsmanager_secret.sftp_credentials.arn
+      }
+    ]
+  })
+}
+
+# Anexa a política à Role que você já tinha criado
+resource "aws_iam_role_policy_attachment" "lambda_attach" {
+  role       = aws_iam_role.lambda_glue_role.name
+  policy_arn = aws_iam_policy.lambda_policy.arn
 }
 
 # ==========================================
@@ -79,11 +143,11 @@ resource "aws_lambda_function" "sftp_extractor" {
 
   environment {
     variables = {
-      LANDING_BUCKET = var.landing_bucket
-      SFTP_HOST      = "sftp_lakehouse"
-      SFTP_PORT      = "22"
-      SFTP_USER      = "sftpuser"
-      SFTP_PASSWORD  = "password"
+      LANDING_BUCKET   = var.landing_bucket
+      SFTP_HOST        = "sftp_lakehouse"
+      SFTP_PORT        = "22"
+      SECRET_ARN       = aws_secretsmanager_secret.sftp_credentials.arn
+      AWS_ENDPOINT_URL = "http://host.docker.internal:4566"
     }
   }
 }
@@ -97,4 +161,9 @@ output "lambda_arn" {
 
 output "sftp_lambda_arn" { 
   value = aws_lambda_function.sftp_extractor.arn 
+}
+
+output "glue_role_arn" {
+  value       = aws_iam_role.lambda_glue_role.arn
+  description = "ARN da IAM Role unificada para Lambda e Glue"
 }

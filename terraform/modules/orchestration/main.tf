@@ -15,3 +15,19 @@ resource "aws_cloudwatch_event_target" "sftp_lambda_target" {
   target_id = "TriggerLambdaSFTP"
   arn       = var.sftp_lambda_extractor_arn
 }
+
+resource "aws_lambda_permission" "allow_eventbridge_api" {
+  statement_id  = "AllowExecutionFromEventBridge_API_${var.environment}"
+  action        = "lambda:InvokeFunction"
+  function_name = var.lambda_extractor_arn
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.cron_trigger.arn
+}
+
+resource "aws_lambda_permission" "allow_eventbridge_sftp" {
+  statement_id  = "AllowExecutionFromEventBridge_SFTP_${var.environment}"
+  action        = "lambda:InvokeFunction"
+  function_name = var.sftp_lambda_extractor_arn
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.cron_trigger.arn
+}

@@ -12,3 +12,7 @@ src/lambdas/cryptography/
 src/lambdas/cffi/
 src/lambdas/*.dist-info/
 terraform/modules/compute/files/
+
+sftp_data/
+output_api.txt
+output_sftp.txt
