@@ -1,5 +1,5 @@
 import os
-from pyspark.sql import SparkSession
+from spark_utils import get_spark_session
 
 # 1. Injetar credenciais para o AWS SDK v2 do Iceberg ler automaticamente
 os.environ["AWS_ACCESS_KEY_ID"] = "mock"
@@ -11,26 +11,7 @@ DATABASE_NAME = "uk_economy_db_local"
 TABLE_NAME = "uk_companies"
 S3_LANDING_PATH = "s3a://uk-lakehouse-landing-local/raw/sftp/uk_companies/*.csv"
 
-# Inicialização do SparkSession
-spark = SparkSession.builder \
-    .appName("FlociCompaniesIcebergGlue") \
-    .config("spark.hadoop.fs.s3a.connection.timeout", "60000") \
-    .config("spark.hadoop.fs.s3a.connection.establish.timeout", "60000") \
-    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
-    .config("spark.sql.catalog.glue_catalog", "org.apache.iceberg.spark.SparkCatalog") \
-    .config("spark.sql.catalog.glue_catalog.warehouse", "s3a://uk-lakehouse-iceberg-local/warehouse/") \
-    .config("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog") \
-    .config("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO") \
-    .config("spark.sql.catalog.glue_catalog.s3.endpoint", "http://localhost:4566") \
-    .config("spark.sql.catalog.glue_catalog.glue.endpoint", "http://localhost:4566") \
-    .config("spark.sql.catalog.glue_catalog.client.region", "us-east-1") \
-    .config("spark.sql.catalog.glue_catalog.s3.path-style-access", "true") \
-    .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:4566") \
-    .config("spark.hadoop.fs.s3a.path.style.access", "true") \
-    .config("spark.hadoop.fs.s3a.access.key", "mock") \
-    .config("spark.hadoop.fs.s3a.secret.key", "mock") \
-    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-    .getOrCreate()
+spark = get_spark_session("FlociCompaniesIcebergGlue")
 
 try:
     print(f"📖 Lendo dados brutos do SFTP em: {S3_LANDING_PATH}")
