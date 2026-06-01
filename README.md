@@ -84,7 +84,7 @@ Navegue até a pasta do Terraform, crie o isolamento de ambiente (workspace) e a
   ```
 
 ### Passo 5: Fazer o Upload do Script do Glue para o S3
-O AWS Glue precisa ler o script PySpark a partir de um bucket do S3. Como o Terraform não faz o upload de scripts de processamento dinâmicos por padrão, faça isso manualmente apontando para o LocalStack:
+O AWS Glue precisa ler o script PySpark a partir de um bucket do S3. Como o Terraform não faz o upload de scripts de processamento dinâmicos por padrão, faça isso manualmente apontando para o Floci:
 
   ```bash
   aws --endpoint-url=http://localhost:4566 s3 cp src/glue_jobs/inflation/landing_to_iceberg_inflation.py s3://uk-lakehouse-landing-local/scripts/landing_to_iceberg_inflation.py
