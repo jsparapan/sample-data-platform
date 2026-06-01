@@ -1,30 +1,60 @@
 import os
+import json
 import boto3
+import logging
 import paramiko
 
-def lambda_handler(event, context):
-    # Pega as variáveis vindas do Terraform (ou defaults para local)
-    sftp_host = os.environ.get("SFTP_HOST", "sftp_lakehouse") 
-    sftp_port = int(os.environ.get("SFTP_PORT", 22))
-    sftp_user = os.environ.get("SFTP_USER", "sftpuser")
-    sftp_pass = os.environ.get("SFTP_PASSWORD", "password")
-    bucket_name = os.environ.get("LANDING_BUCKET")
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+def get_secret(secret_arn, endpoint_url):
+    """Busca as credenciais do SFTP no Secrets Manager de forma segura"""
+    logger.info(f"Buscando credenciais do segredo: {secret_arn}")
     
-    s3_client = boto3.client("s3")
-    
-    print(f"Conectando ao servidor SFTP {sftp_host}:{sftp_port}...")
-    
-    # Configurando o cliente SSH e ignorando validação estrita de host key (apenas para lab/estudo)
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    # Conecta ao Secrets Manager apontando para o Floci
+    client = boto3.client(
+        service_name='secretsmanager',
+        region_name='us-east-1',
+        endpoint_url=endpoint_url
+    )
     
     try:
+        response = client.get_secret_value(SecretId=secret_arn)
+        return json.loads(response['SecretString'])
+    except Exception as e:
+        logger.error("Erro ao buscar o segredo", exc_info=True)
+        raise e
+
+def lambda_handler(event, context):
+    # 1. Recuperando Variáveis de Ambiente
+    secret_arn = os.environ['SECRET_ARN']
+    bucket_name = os.environ['LANDING_BUCKET']
+    sftp_host = os.environ['SFTP_HOST']
+    sftp_port = int(os.environ.get('SFTP_PORT', 22))
+    endpoint = os.environ.get('AWS_ENDPOINT_URL', "http://172.17.0.1:4566")
+    
+    # 2. Inicializando clientes AWS
+    s3_client = boto3.client("s3", endpoint_url=endpoint, region_name="us-east-1")
+    
+    # 3. Recupera as credenciais de forma segura em tempo de execução
+    credentials = get_secret(secret_arn, endpoint)
+    sftp_user = credentials['username']
+    sftp_pass = credentials['password']
+    
+    logger.info(f"Conectando ao SFTP ({sftp_host}:{sftp_port}) com o usuário: {sftp_user}")
+    
+    try:
+        # 4. Inicializando o cliente SSH (Paramiko)
+        ssh = paramiko.SSHClient()
+        # Ignora a verificação da chave do host (útil para ambientes locais/mockados)
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
         ssh.connect(sftp_host, port=sftp_port, username=sftp_user, password=sftp_pass)
         sftp = ssh.open_sftp()
         
         remote_path = "/upload"
         files = sftp.listdir(remote_path)
-        print(f"Arquivos encontrados no SFTP: {files}")
+        logger.info(f"Arquivos encontrados no SFTP: {files}")
         
         for file_name in files:
             if file_name.endswith(".csv"):
@@ -42,14 +72,17 @@ def lambda_handler(event, context):
                     Key=s3_key,
                     Body=file_content
                 )
-                print(f"Sucesso: {file_name} transferido para s3://{bucket_name}/{s3_key}")
+                logger.info(f"Sucesso: {file_name} transferido para s3://{bucket_name}/{s3_key}")
                 
         return {"statusCode": 200, "body": "Extração SFTP concluída com sucesso."}
         
     except Exception as e:
-        print(f"Falha na extração SFTP: {str(e)}")
+        logger.error(f"Falha na extração SFTP: {str(e)}", exc_info=True)
         return {"statusCode": 500, "body": f"Erro: {str(e)}"}
         
     finally:
-        if 'sftp' in locals(): sftp.close()
-        if 'ssh' in locals(): ssh.close()
+        # Garante que as conexões sejam fechadas mesmo se houver erro
+        if 'sftp' in locals(): 
+            sftp.close()
+        if 'ssh' in locals(): 
+            ssh.close()

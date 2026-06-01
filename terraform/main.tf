@@ -1,5 +1,5 @@
 locals {
-  env = terraform.workspace
+  env = terraform.workspace == "default" ? "local" : terraform.workspace
 }
 
 module "storage" {
@@ -17,6 +17,15 @@ module "compute" {
 module "orchestration" {
   source                    = "./modules/orchestration"
   environment               = local.env
+  
+  # Recebe os ARNs das Lambdas recém-criadas no Compute
   lambda_extractor_arn      = module.compute.lambda_arn
   sftp_lambda_extractor_arn = module.compute.sftp_lambda_arn
+}
+
+module "processing" {
+  source              = "./modules/processing"
+  environment         = local.env
+  glue_role_arn       = module.compute.glue_role_arn
+  lakehouse_bucket_id = module.storage.lakehouse_bucket_name 
 }

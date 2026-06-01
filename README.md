@@ -87,7 +87,8 @@ Navegue até a pasta do Terraform, crie o isolamento de ambiente (workspace) e a
 O AWS Glue precisa ler o script PySpark a partir de um bucket do S3. Como o Terraform não faz o upload de scripts de processamento dinâmicos por padrão, faça isso manualmente apontando para o LocalStack:
 
   ```bash
-  aws --endpoint-url=http://localhost:4566 s3 cp src/glue_jobs/landing_to_iceberg.py s3://uk-lakehouse-landing-local/scripts/landing_to_iceberg.py
+  aws --endpoint-url=http://localhost:4566 s3 cp src/glue_jobs/inflation/landing_to_iceberg_inflation.py s3://uk-lakehouse-landing-local/scripts/landing_to_iceberg_inflation.py
+  aws --endpoint-url=http://localhost:4566 s3 cp src/glue_jobs/companies/landing_to_iceberg_companies.py s3://uk-lakehouse-landing-local/scripts/landing_to_iceberg_companies.py
   ```
 
 ### Testando o Pipeline de Ponta a Ponta
@@ -114,20 +115,20 @@ Nota de Arquitetura: Para contornar limitações de atualizações atômicas de 
 Agora, execute o Job Spark que lerá a Landing Zone, aplicará as transformações e salvará os dados catalogados no formato Apache Iceberg. Note, para companies, há uma simulação de camada silver. Para executá-la, é obrigatório a landing ser executada anteriormente:
 
   ```bash
-  spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.iceberg:iceberg-aws-bundle:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262   src/glue_jobs/inflation/landing_to_iceberg_inflation.py
-  spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.iceberg:iceberg-aws-bundle:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262   src/glue_jobs/companies/landing_to_iceberg_companies.py
-  spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.iceberg:iceberg-aws-bundle:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262   src/glue_jobs/companies/iceberg_companies_silver.py
+  spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.iceberg:iceberg-aws-bundle:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 --py-files src/glue_jobs/spark_utils.py src/glue_jobs/inflation/landing_to_iceberg_inflation.py
+  spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.iceberg:iceberg-aws-bundle:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 --py-files src/glue_jobs/spark_utils.py src/glue_jobs/companies/landing_to_iceberg_companies.py
+  spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.iceberg:iceberg-aws-bundle:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 --py-files src/glue_jobs/spark_utils.py  src/glue_jobs/companies/iceberg_companies_silver.py
   ```
 Para validar a criação dos metadados e arquivos de manifesto do Iceberg (arquivos .metadata.json, .avro), inspecione o bucket de Lakehouse:
 
   ```bash
-  aws --endpoint-url=http://localhost:4566 s3 ls s3://uk-lakehouse-iceberg-local/warehouse/uk_economy_db_local/uk_cpi_inflation/ --recursive --region us-east-1
-  aws --endpoint-url=http://localhost:4566 s3 ls s3://uk-lakehouse-iceberg-local/warehouse/uk_economy_db_local/uk_companies/ --recursive --region us-east-1
+  aws --endpoint-url=http://localhost:4566 s3 ls s3://uk-lakehouse-iceberg-local/warehouse/uk_economy_db_local.db/uk_cpi_inflation/ --recursive --region us-east-1
+  aws --endpoint-url=http://localhost:4566 s3 ls s3://uk-lakehouse-iceberg-local/warehouse/uk_economy_db_local.db/uk_companies/ --recursive --region us-east-1
   ```
 
 A estrutura final contará com as pastas:
  - data/: Contendo os arquivos .parquet altamente compactados e indexados de forma colunar.
- - metadata/: Contendo arquivos .metadata.json e manifestos .avro, responsáveis pelo controle transacional (ACID), isolamento de concorrência e capacidade de Time Travel (viagem no tempo) nos dados.
+ - metadata/: O coração do Iceberg. Você verá arquivos .metadata.json, .avro (manifest lists) e .snap (snapshots). São eles que permitem que o Lakehouse tenha propriedades ACID (Time Travel, Rollback e Schema Evolution) em cima de um armazenamento de objetos burro como o S3!
 
 ### 🔄 Como migrar para a AWS Real?
 A beleza desta arquitetura baseada em Workspaces é a portabilidade. Para implantar na nuvem real da AWS:
